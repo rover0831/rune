@@ -17,7 +17,7 @@ export const getUtxos = async (address: string, networkType: string): Promise<IU
   const url = `https://mempool.space/${networkType}/api/address/${address}/utxo`;
   const res = await axios.get(url);
   const utxos: IUtxo[] = [];
-  
+
   res.data.forEach((utxoData: any) => {
     utxos.push({
       txid: utxoData.txid,
@@ -28,7 +28,7 @@ export const getUtxos = async (address: string, networkType: string): Promise<IU
   return utxos;
 };
 
-export const pushBTCpmt = async (rawtx: any,  networkType: string) => {
+export const pushBTCpmt = async (rawtx: any, networkType: string) => {
   const txid = await postData(
     `https://mempool.space/${networkType}/api/tx`,
     rawtx
@@ -62,4 +62,9 @@ const postData = async (
         throw new Error("Got an err when push tx");
     }
   }
+}
+
+export const getCurrentFeeRate = async () => {
+  const response = await axios.get('https://mempool.space/testnet/api/v1/fees/recommended');
+  return response.data.fastestFee
 }

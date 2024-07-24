@@ -16,8 +16,6 @@ initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
 const bip32 = BIP32Factory(ecc);
 
-
-
 export class WIFWallet {
   private hdPath = "m/86'/0'/0'/0/0";
   private network: bitcoin.networks.Network;
