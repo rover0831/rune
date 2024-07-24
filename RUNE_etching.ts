@@ -60,9 +60,9 @@ const wallet = new WIFWallet({ networkType: networkType, privateKey: privateKey 
 async function etching() {
   const TESTNET_FEERATE = await getCurrentFeeRate();
 
-  const initialFee: number = 40000;
+  const initialFee: number = 1000;
 
-  const name = "HARMONITECH•RESURSIVE•RUNE";
+  const name = "HARMONITECH•RESURSIVE•RUNE•01";
 
   const keyPair = wallet.ecPair;
 
@@ -133,67 +133,63 @@ async function etching() {
   }
   
   // calculate inscription fee
-  let redeemMinFee: number | undefined = getMinIspFee(fakeUtxo, wallet, TESTNET_FEERATE, initialFee);
+  let redeemMinFee = getMinIspFee(fakeUtxo, wallet, TESTNET_FEERATE, initialFee);
+  // sendUtxo(redeemMinFee + 546, address);
 
-  sendUtxo(redeemMinFee!, address);
+  const utxos = await waitUntilUTXO(address as string);
+  console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}:${utxos[0].value}`);
 
-  // const utxos = await waitUntilUTXO(address as string);
-  // console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}:${utxos[0].value}`);
+  const psbt = new Psbt({ network });
 
-  // const psbt = new Psbt({ network });
+  psbt.addInput({
+    hash: utxos[0].txid,
+    index: utxos[0].vout,
+    witnessUtxo: { value: utxos[0].value, script: script_p2tr.output! },
+    tapLeafScript: [
+      {
+        leafVersion: etching_redeem.redeemVersion,
+        script: etching_redeem.output,
+        controlBlock: etching_p2tr.witness![etching_p2tr.witness!.length - 1],
+      },
+    ],
+  });
 
-  // psbt.addInput({
-  //   hash: utxos[0].txid,
-  //   index: utxos[0].vout,
-  //   witnessUtxo: { value: utxos[0].value, script: script_p2tr.output! },
-  //   tapLeafScript: [
-  //     {
-  //       leafVersion: etching_redeem.redeemVersion,
-  //       script: etching_redeem.output,
-  //       controlBlock: etching_p2tr.witness![etching_p2tr.witness!.length - 1],
-  //     },
-  //   ],
-  // });
-
-  // const rune = Rune.fromName(name);
+  const rune = Rune.fromName(name);
   
-  // const terms = new Terms(
-  //   1000,
-  //   10000,
-  //   new Range(none(), none()),
-  //   new Range(none(), none())
-  // );
+  const terms = new Terms(
+    1000,
+    10000,
+    new Range(none(), none()),
+    new Range(none(), none())
+  );
   
-  // const etching = new Etching(
-  //   some(1),
-  //   some(1000000),
-  //   some(rune),
-  //   none(),
-  //   some("$"),
-  //   some(terms),
-  //   true
-  // );
+  const etching = new Etching(
+    some(1),
+    some(1000000),
+    some(rune),
+    none(),
+    some("$"),
+    some(terms),
+    true
+  );
   
-  // const stone = new Runestone([], some(etching), none(), none());
+  const stone = new Runestone([], some(etching), none(), none());
   
-  // psbt.addOutput({
-  //   script: stone.encipher(),
-  //   value: 0,
-  // });
+  psbt.addOutput({
+    script: stone.encipher(),
+    value: 0,
+  });
   
-  // const change = utxos[0].value - 546 - redeemMinFee!;
+  const change = utxos[0].value - 546 - 546 - redeemMinFee;
 
-  // psbt.addOutput({
-  //   address: recieveAddress, // change address
-  //   value: 546,
-  // });
+  console.log("change  => ", change)
 
-  // psbt.addOutput({
-  //   address: wallet.address, // change address
-  //   value: change,
-  // });
+  psbt.addOutput({
+    address: recieveAddress, // change address
+    value: 546,
+  });
 
-  // await signAndSend(keyPair, psbt, address as string);
+  await signAndSend(keyPair, psbt, address as string);
 }
 
 const makeFakePsbt = (address: string, utxo: IUTXO, initialFee: number) => {
@@ -294,36 +290,33 @@ const makeFakePsbt = (address: string, utxo: IUTXO, initialFee: number) => {
   });
 
   const change = utxo.value - 546 - initialFee;
-  
 
   psbt.addOutput({
     address: address, //Destination Address
     value: 546,
   });
 
-  psbt.addOutput({
-    address: wallet.address, // Change address
-    value: change,
-  });
-
   return psbt;
 }
 
-const getMinIspFee = (utxo: IUTXO, wallet: WIFWallet, feeRate: number, initialFee: number): number | undefined => {
+const getMinIspFee = (utxo: IUTXO, wallet: WIFWallet, feeRate: number, initialFee: number): number => {
   const keyPair = wallet.ecPair;
   let redeemPsbt = makeFakePsbt(wallet.address, utxo, initialFee);
   redeemPsbt.signInput(0, keyPair);
   redeemPsbt.finalizeAllInputs();
-  console.log("virt: ", redeemPsbt.extractTransaction().virtualSize())
-  let redeemFee = redeemPsbt.extractTransaction().virtualSize() * feeRate;
-  console.log("fee: ", redeemFee)
 
-  if (redeemFee == initialFee) {
+  console.log("virt: ", redeemPsbt.extractTransaction().virtualSize());
+
+  let redeemFee = redeemPsbt.extractTransaction().virtualSize() * feeRate;
+  console.log("fee: ", redeemFee);
+
+  if (redeemFee === initialFee) {
     return redeemFee;
   } else {
-    getMinIspFee(utxo, wallet, feeRate, redeemFee);
+    return getMinIspFee(utxo, wallet, feeRate, redeemFee);
   }
-}
+};
+
 
 // main
 etching();

@@ -26,14 +26,15 @@ export const sendUtxo = async (sendAmount: number, sendAddress: string) => {
     const TESTNET_FEERATE = await getCurrentFeeRate();
 
     const wallet = new SeedWallet({ networkType: networkType, seed: seed });
-
+    
     const utxos = await getUtxos(wallet.address, networkType);
     const sortUtxos = await quickSort(utxos);
     const sumArr: IUtxo[] = [];
 
-    const data: { redeemFee: number | undefined, sumArr: IUtxo[] } = await getMinFee(sortUtxos, sumArr, sendAddress, sendAmount, 1000, wallet, TESTNET_FEERATE);
+    const data: { redeemFee: number; sumArr: IUtxo[] } = getMinFee(sortUtxos, sumArr, sendAddress, sendAmount, 1000, wallet, TESTNET_FEERATE);
+    console.log("data: ", data)
 
-    let psbt = mergeUTXOPsbt(wallet, data.sumArr, networkType, sumArr.length, data.redeemFee, sendAddress, sendAmount);
+    let psbt = mergeUTXOPsbt(wallet, data.sumArr, networkType, data.sumArr.length, data.redeemFee, sendAddress, sendAmount);
     let signedPsbt = wallet.signPsbt(psbt, wallet.ecPair)
 
     const txHex = signedPsbt.extractTransaction().toHex();
@@ -72,7 +73,7 @@ const getMinFee = (
     initialFee: number,
     wallet: SeedWallet,
     feeRate: number
-): { redeemFee: number | undefined, sumArr: IUtxo[] } => {
+): { redeemFee: number, sumArr: IUtxo[] } => {
     let sum: number = 0;
     for (let j = 0; j < sumArr.length; j++) {
         sum += sumArr[j].value;
