@@ -19,6 +19,9 @@ import networkConfig from "config/network.config";
 import { WIFWallet } from 'utils/WIFWallet'
 import { SeedWallet } from "utils/SeedWallet";
 import cbor from 'cbor'
+import { severalUtxos } from "Several_UTXO_send";
+
+const TESTNET_FEERATE = 20;
 //test
 const network = networks.testnet;
 // const network = networks.bitcoin;
@@ -84,6 +87,11 @@ async function delegateInscribe() {
   const address = ordinal_p2tr.address ?? "";
   console.log("send coin to address", address);
 
+  let redeemPsbt = makeFakePsbt();
+  redeemPsbt = wallet.signPsbt(redeemPsbt, wallet.ecPair)
+  let redeemFee = redeemPsbt.extractTransaction().virtualSize() * TESTNET_FEERATE;
+  severalUtxos(redeemFee);
+
   const utxos = await waitUntilUTXO(address as string);
   console.log(`Using UTXO ${utxos[0].txid}:${utxos[0].vout}`);
 
@@ -112,7 +120,7 @@ async function delegateInscribe() {
   });
 
   psbt.addOutput({
-    address: receiveAddress, // Change address
+    address: wallet.address, // Change address
     value: change,
   });
 
@@ -120,6 +128,67 @@ async function delegateInscribe() {
 }
 
 delegateInscribe()
+
+export const makeFakePsbt = () => {
+  const keyPair = wallet.ecPair;
+  const parentOrdinalStack = createdelegateInscriptionTapScript();
+
+  const ordinal_script = script.compile(parentOrdinalStack);
+
+  const scriptTree: Taptree = {
+    output: ordinal_script,
+  };
+
+  const redeem = {
+    output: ordinal_script,
+    redeemVersion: 192,
+  };
+
+  const ordinal_p2tr = payments.p2tr({
+    internalPubkey: toXOnly(keyPair.publicKey),
+    network,
+    scriptTree,
+    redeem,
+  });
+  const psbt = new Psbt({ network });
+
+  const radom_txId = "";
+
+  const fakeUtxo = {
+    txId: radom_txId,
+    vout: 0,
+    value: 0,
+  }
+
+  psbt.addInput({
+    hash: fakeUtxo.txId,
+    index: fakeUtxo.vout,
+    tapInternalKey: toXOnly(keyPair.publicKey),
+    witnessUtxo: { value: fakeUtxo.value, script: ordinal_p2tr.output! },
+    tapLeafScript: [
+      {
+        leafVersion: redeem.redeemVersion,
+        script: redeem.output,
+        controlBlock: ordinal_p2tr.witness![ordinal_p2tr.witness!.length - 1],
+      },
+    ],
+  });
+
+
+  const change = fakeUtxo.value - 546 - transaction_fee;
+
+  psbt.addOutput({
+    address: receiveAddress, //Destination Address
+    value: 546,
+  });
+
+  psbt.addOutput({
+    address: wallet.address, // Change address
+    value: change,
+  });
+
+  return psbt;
+}
 
 export async function signAndSend(
   keypair: BTCSigner,
